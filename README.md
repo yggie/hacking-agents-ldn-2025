@@ -25,6 +25,14 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 Chat with our secretary using the input textbox
 
+## Unfinished Works
+
+Our goal was to leverage the latest v3 model of Elevenlabs to create a realistic
+personality. Unfortunately, the model is not yet generally available via an API.
+The workaround is to copy the text from the chat into the Elevenlabs playground
+to experience the full results. To make the most of the new model, click the
+special button to annotate the text with the v3 syntax.
+
 ## Inspiration
 
 The project was inspired by previous works from:
