@@ -1,0 +1,11 @@
+version: "3"
+agent:
+    authtoken: <YOUR_AUTH_TOKEN>
+
+tunnels:
+  web_app:
+    proto: http
+    addr: 3000
+  twilio_server:
+    proto: http
+    addr: 8888

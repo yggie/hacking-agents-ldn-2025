@@ -2,7 +2,7 @@ import Fastify from "fastify";
 import fastifyWs from "@fastify/websocket";
 import fastifyFormbody from "@fastify/formbody";
 import twilio from "twilio";
-import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
+import twilioWs from "./src/utils/twilio-ws.ts";
 
 // import { flow } from "./langflow.js";
 // import { tunnelUrl, port, langflowStreaming } from "./config.js";
@@ -17,10 +17,6 @@ const fastify = Fastify({
 });
 fastify.register(fastifyWs);
 fastify.register(fastifyFormbody);
-
-const elevenlabs = new ElevenLabsClient({
-  apiKey: process.env.ELEVENLABS_API_KEY,
-});
 
 fastify.post("/voice", (_request, reply) => {
   const twiml = new VoiceResponse();
@@ -45,52 +41,26 @@ fastify.register(async function (fastify) {
         case "prompt": {
           fastify.log.info(`Processing prompt: ${message.voicePrompt}`);
 
-          //   const audio = await elevenlabs.textToSpeech.convert(
-          //     "Xb7hH8MSUJpSbSDYk0k2",
-          //     {
-          //       text: "",
-          //       modelId: "eleven_multilingual_v2",
-          //     }
-          //   );
+          const apiResp = await fetch("http://localhost:3000/api/v1/chat", {
+            method: "POST",
+            headers: {
+              accept: "application/json",
+            },
+            body: JSON.stringify({
+              messages: [{ role: "user", content: message.voicePrompt }],
+            }),
+          });
 
-          //   if (!langflowStreaming) {
-          //     try {
-          //       const response = await flow.run(message.voicePrompt, {
-          //         session_id: socket.callSid,
-          //       });
-          //       //   sendResponse(socket, response.chatOutputText());
-          //       fastify.log.info(`Response: ${response.chatOutputText()}`);
-          //     } catch (error) {
-          //       fastify.log.error(`Error processing prompt: ${error.message}`);
-          //       sendErrorAndEnd(
-          //         socket,
-          //         "I'm sorry, an application error has occurred."
-          //       );
-          //     }
-          //   } else {
-          //     try {
-          //       const response = await flow.stream(message.voicePrompt, {
-          //         session_id: socket.callSid,
-          //       });
-          //       let responseText = "";
-          //       for await (const chunk of response) {
-          //         if (chunk.event === "token") {
-          //           sendResponse(socket, chunk.data.chunk, false);
+          const { text } = await apiResp.json();
 
-          //           responseText += chunk.data.chunk;
-          //         } else if (chunk.event === "end") {
-          //           fastify.log.info(`Response: ${responseText}`);
-          //           sendResponse(socket, "", true);
-          //         }
-          //       }
-          //     } catch (error) {
-          //       fastify.log.error(`Error processing prompt: ${error.message}`);
-          //       sendErrorAndEnd(
-          //         socket,
-          //         "I'm sorry, an application error has occurred."
-          //       );
-          //     }
-          //   }
+          const audioResp = await fetch("http://localhost:3000/api/v1/speech", {
+            method: "POST",
+            body: JSON.stringify({ text }),
+          });
+
+          const { url } = await audioResp.json();
+
+          socket.send(JSON.stringify(twilioWs.play(url)));
           break;
         }
         case "error":
