@@ -1,103 +1,140 @@
-import Image from "next/image";
+"use client";
+
+import clsx from "clsx";
+import { useEffect, useRef, useState } from "react";
+import { BiEqualizer } from "react-icons/bi";
+
+export interface UIMessage {
+  role: "assistant" | "user";
+  content: string;
+  annotated?: boolean;
+}
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [isUserTurn, setIsUserTurn] = useState(true);
+  const [messages, setMessages] = useState<UIMessage[]>([]);
+  const [audioUrl, setAudioUrl] = useState("");
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const lastMsg = messages.at(-1);
+    if (lastMsg && lastMsg.role === "assistant") {
+      fetch("/api/v1/speech", {
+        method: "POST",
+        body: JSON.stringify({ text: lastMsg.content }),
+      }).then(async (resp) => {
+        const { url } = await resp.json();
+
+        setAudioUrl(url);
+      });
+    } else {
+      setAudioUrl("");
+    }
+  }, [messages]);
+
+  return (
+    <main className="w-screen h-screen overflow-y-auto overflow-x-hidden">
+      <div className="w-full max-w-xl mx-auto flex flex-col h-full">
+        <div className="bg-base-200 p-2 flex-1 overflow-y-scroll flex flex-col-reverse rounded-box">
+          {messages.toReversed().map((message, index) => (
+            <div
+              className={clsx(
+                "chat relative",
+                message.role === "user" ? "chat-end" : "chat-start"
+              )}
+            >
+              <div className="chat-bubble">{message.content}</div>
+
+              {message.role === "assistant" ? (
+                <button
+                  type="button"
+                  className="btn btn-circle btn-xs btn-soft absolute right-0 top-0"
+                  onClick={() => {
+                    fetch("/api/v1/annotate", {
+                      method: "POST",
+                      body: JSON.stringify({ text: message.content }),
+                    }).then(async (resp) => {
+                      const { text } = await resp.json();
+
+                      // hack
+                      message.content = text;
+                      setMessages((msgs) => [...msgs]);
+                    });
+                  }}
+                >
+                  <BiEqualizer />
+                </button>
+              ) : null}
+            </div>
+          ))}
+          <div className="divider opacity-50" />
+          <div className="flex flex-row justify-center">
+            <span className="opacity-50 italic text-sm">
+              Sarah Morgan picks up the phone
+            </span>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+
+        {audioUrl ? (
+          <div className="p-1">
+            <audio src={audioUrl} controls autoPlay className="w-full" />
+          </div>
+        ) : null}
+
+        <form
+          className="join w-full py-1"
+          onSubmit={(ev) => {
+            ev.preventDefault();
+
+            if (inputRef.current) {
+              const text = inputRef.current.value;
+              const newMessages = [
+                ...messages,
+                { role: "user" as const, content: text },
+              ];
+              setMessages(newMessages);
+              setIsUserTurn(false);
+              inputRef.current.value = "";
+
+              fetch("/api/v1/chat", {
+                method: "POST",
+                headers: {
+                  accept: "application/json",
+                },
+                body: JSON.stringify({
+                  messages: newMessages,
+                }),
+              })
+                .then(async (resp) => {
+                  const { text } = await resp.json();
+
+                  setMessages((msgs) => [
+                    ...msgs,
+                    { role: "assistant", content: text },
+                  ]);
+                })
+                .finally(() => {
+                  setIsUserTurn(true);
+                });
+            }
+          }}
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+          <input
+            ref={inputRef}
+            type="text"
+            className="input join-item flex-1 rounded-l-full"
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+
+          <button
+            type="submit"
+            disabled={!isUserTurn}
+            className="btn join-item rounded-r-full"
+          >
+            Send
+          </button>
+        </form>
+      </div>
+    </main>
   );
 }
